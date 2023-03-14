@@ -1,84 +1,69 @@
-from sqlalchemy import Table, Column, Integer, String, Float, Date, MetaData, ForeignKey
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
+import sqlalchemy as db
 import csv
-from datetime import date
+from datetime import datetime
 
-engine = create_engine('sqlite:///stations.db', echo=True)
+engine = db.create_engine('sqlite:///stations.db', echo=True)
+conn = engine.connect()
 
-meta = MetaData()
+meta = db.MetaData()
 
-stations = Table(
+stations = db.Table(
     'stations', meta,
-    Column('station', String, primary_key=True),
-    Column('latitude', Float),
-    Column('longitude', Float),
-    Column('elevation', Float),
-    Column('name', String),
-    Column('country', String),
-    Column('state', String),
+    db.Column('station', db.String, primary_key=True),
+    db.Column('latitude', db.Float),
+    db.Column('longitude', db.Float),
+    db.Column('elevation', db.Float),
+    db.Column('name', db.String),
+    db.Column('country', db.String),
+    db.Column('state', db.String),
 )
 
-
-measure = Table(
+measure = db.Table(
     'measure', meta,
-    Column('station', String),
-    Column('date', String),
-    Column('precip', Float),
-    Column('tobs', Integer),
+    db.Column('station', db.String),
+    db.Column('date', db.Date),
+    db.Column('precip', db.Float),
+    db.Column('tobs', db.Integer),
 )
-
 
 meta.create_all(engine)
-# print(engine.table_names())
+print(repr(meta.tables['stations']))
 
-insert_query_s = stations.insert()
 
 with open('clean_stations.csv', 'r', encoding="utf-8") as csvfile:
     csv_reader = csv.reader(csvfile, delimiter=',')
     header = next(csv_reader)
     for row in csv_reader:
-        row[1] = float(row[1])
-        row[2] = float(row[2])
-        row[3] = float(row[3])
-        engine.execute(
-            insert_query_s,
-            [{"station": row[0], "latitude": row[1],
-              "longitude": row[2], "elevation": row[3],
-              "name": row[4], "country": row[5], "state": row[6]
-              }])
-        # print(insert_query_s)
 
+        query = db.insert(stations).values(
+            station=row[0],
+            latitude=float(row[1]),
+            longitude=float(row[2]),
+            elevation=float(row[3]),
+            name=row[4],
+            country=row[5],
+            state=row[6]
+        )
+        conn.execute(query)
+        conn.commit()
 
-insert_query_m = measure.insert()
-
+measure_data = []
 with open('clean_measure.csv', 'r', encoding="utf-8") as csvfile:
     csv_reader = csv.reader(csvfile, delimiter=',')
     header = next(csv_reader)
-    count_row = 0
-    for row in csv_reader:
-        row[2] = float(row[2])
-        row[3] = int(row[3])
-        count_row += 1
-        if count_row <= 20:
-            engine.execute(
-                insert_query_m,
-                [{"station": row[0], "date": row[1],
-                  "recip": row[2], "tobs": row[3],
-                  }]
-            )
-        else:
-            break
+    for ind, row in enumerate(csv_reader):
 
-conn = engine.connect()
-st = stations.select().limit(5)
-results = conn.execute(st)
-# results = conn.execute("SELECT * FROM stations LIMIT 5").fetchall()
-for r in results:
-    print(r)
+        d = dict(
+            station=row[0],
+            date=datetime.strptime(row[1], '%Y-%m-%d'),
+            precip=float(row[2]),
+            tobs=float(row[3]),
+        )
+        measure_data.append(d)
 
-conn = engine.connect()
-m = measure.select().limit(5)
-results = conn.execute(m)
-for r in results:
-    print(m)
+
+query = db.insert(measure)
+conn.execute(query, measure_data)
+conn.commit()
+conn.close()
+print(len(measure_data))
